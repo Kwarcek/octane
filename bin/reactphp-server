@@ -1,0 +1,98 @@
+#!/usr/bin/env php
+<?php
+
+use Laravel\Octane\ReactPhp\ReactPhpClient;
+use Laravel\Octane\RequestContext;
+use Laravel\Octane\ReactPhp\ReactPhpExtension;
+use Laravel\Octane\ReactPhp\ServerStateFile;
+use Laravel\Octane\ReactPhp\WorkerState;
+use React\EventLoop\Loop;
+use React\Http\HttpServer;
+use React\Http\Message\Response;
+use React\Promise\Deferred;
+use React\Socket\SocketServer;
+use Psr\Http\Message\ServerRequestInterface;
+use \Laravel\Octane\Worker;
+
+ini_set('display_errors', 'stderr');
+
+require_once __DIR__.'/../src/Stream.php';
+
+require __DIR__.'/../fixes/fix-symfony-dd.php';
+
+$bootstrap = fn ($serverState) => require __DIR__.'/bootstrap.php';
+
+/*
+|--------------------------------------------------------------------------
+| Create The ReactPHP Server
+|--------------------------------------------------------------------------
+|
+| First, we will load the server state file from disk. This file contains
+| various information we need to boot ReactPHP such as the configuration
+| and application name. We can use this data to start up our server.
+|
+*/
+
+$serverState = json_decode(file_get_contents(
+    $serverStateFile = $_SERVER['argv'][1]
+), true)['state'];
+
+$extension = new ReactPhpExtension;
+
+/*
+|--------------------------------------------------------------------------
+| Create The HTTP Server
+|--------------------------------------------------------------------------
+|
+| We will create a ReactPHP HTTP server that will handle incoming requests
+| and route them to our Laravel application.
+|
+*/
+
+$app = $bootstrap($serverState);
+
+$workerState = new WorkerState;
+
+$workerState->app = $app;
+$workerState->client = new ReactPhpClient;
+$workerState->worker = new Worker($app, $workerState->client);
+
+$workerState->worker->boot();
+
+$requestHandler = function (ServerRequestInterface $request) use ($workerState, $serverState) {
+    $context = new RequestContext;
+    $context->reactPhpRequest = $request;
+    $context->reactPhpResponse = new Deferred;
+    $context->octaneConfig = $serverState['octaneConfig'] ?? [];
+    $context->publicPath = $serverState['publicPath'] ?? null;
+
+    if ($workerState->client->canServeRequestAsStaticFile($request, $context)) {
+        $workerState->client->serveStaticFile($request, $context);
+        return $context->reactPhpResponse->promise();
+    }
+
+    try {
+        [$request, $context] = $workerState->client->marshalRequest($context);
+
+        $workerState->worker->handle($request, $context);
+
+        return $context->reactPhpResponse->promise();
+    } catch (Throwable $e) {
+        $workerState->client->error($e, $workerState->app, $request, $context);
+        return $context->reactPhpResponse->promise();
+    }
+};
+
+$server = new HttpServer($requestHandler);
+
+$socket = new SocketServer($serverState['host'].':'.$serverState['port']);
+
+$server->listen($socket);
+
+$stateFile = new ServerStateFile($serverStateFile);
+$serverState['pid'] = getmypid();
+$stateFile->write($serverState);
+
+echo "ReactPHP server started on {$serverState['host']}:{$serverState['port']}" . PHP_EOL;
+
+Loop::run();
