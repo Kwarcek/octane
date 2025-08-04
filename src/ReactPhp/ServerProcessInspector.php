@@ -4,7 +4,7 @@ namespace Laravel\Octane\ReactPhp;
 
 use Laravel\Octane\Contracts\ServerProcessInspector as ServerProcessInspectorContract;
 use Laravel\Octane\PosixExtension;
-use Laravel\Octane\RoadRunner\ServerStateFile;
+use Laravel\Octane\ReactPhp\ServerStateFile;
 
 class ServerProcessInspector implements ServerProcessInspectorContract
 {

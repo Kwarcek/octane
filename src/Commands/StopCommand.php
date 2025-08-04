@@ -8,6 +8,8 @@ use Laravel\Octane\RoadRunner\ServerProcessInspector as RoadRunnerServerProcessI
 use Laravel\Octane\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
 use Laravel\Octane\Swoole\ServerProcessInspector as SwooleServerProcessInspector;
 use Laravel\Octane\Swoole\ServerStateFile as SwooleServerStateFile;
+use Laravel\Octane\ReactPhp\ServerProcessInspector as ReactPhpServerProcessInspector;
+use Laravel\Octane\ReactPhp\ServerStateFile;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'octane:stop')]
@@ -40,6 +42,7 @@ class StopCommand extends Command
             'swoole' => $this->stopSwooleServer(),
             'roadrunner' => $this->stopRoadRunnerServer(),
             'frankenphp' => $this->stopFrankenPhpServer(),
+            'reactphp' => $this->stopReactPhpServer(),
             default => $this->invalidServer($server),
         };
     }
@@ -122,6 +125,32 @@ class StopCommand extends Command
         $inspector->stopServer();
 
         app(FrankenPhpStateFile::class)->delete();
+
+        return 0;
+    }
+
+    /**
+     * Stop the ReactPHP server for Octane.
+     *
+     * @return int
+     */
+    protected function stopReactPhpServer()
+    {
+        $inspector = app(ReactPhpServerProcessInspector::class);
+
+        if (! $inspector->serverIsRunning()) {
+            app(ServerStateFile::class)->delete();
+
+            $this->components->error('ReactPHP server is not running.');
+
+            return 1;
+        }
+
+        $this->components->info('Stopping server...');
+
+        $inspector->stopServer();
+
+        app(ServerStateFile::class)->delete();
 
         return 0;
     }
