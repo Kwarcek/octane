@@ -20,6 +20,8 @@
         "laravel/prompts": "^0.1.24|^0.2.0|^0.3.0",
         "laravel/serializable-closure": "^1.3|^2.0",
         "nesbot/carbon": "^2.66.0|^3.0",
+        "react/http": "^1.0",
+        "react/socket": "^1.0",
         "symfony/console": "^6.0|^7.0",
         "symfony/psr-http-message-bridge": "^2.2.0|^6.4|^7.0"
     },
@@ -39,7 +41,8 @@
     },
     "bin": [
         "bin/roadrunner-worker",
-        "bin/swoole-server"
+        "bin/swoole-server",
+        "bin/reactphp-server"
     ],
     "conflict": {
         "spiral/roadrunner": "<2023.1.0",
