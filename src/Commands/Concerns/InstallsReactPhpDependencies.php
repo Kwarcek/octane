@@ -37,7 +37,7 @@ trait InstallsReactPhpDependencies
     {
         $this->components->info('Installing ReactPHP package...');
 
-        $this->runCommand([
+        $this->runComposerCommand([
             'composer',
             'require',
             'react/http',
@@ -51,7 +51,7 @@ trait InstallsReactPhpDependencies
      * @param  array  $command
      * @return void
      */
-    protected function runCommand(array $command)
+    protected function runComposerCommand(array $command)
     {
         $process = $this->createProcess($command);
 
