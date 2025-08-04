@@ -203,6 +203,7 @@ class OctaneServiceProvider extends ServiceProvider
                 Commands\StartRoadRunnerCommand::class,
                 Commands\StartSwooleCommand::class,
                 Commands\StartFrankenPhpCommand::class,
+                Commands\StartReactPhpCommand::class,
                 Commands\ReloadCommand::class,
                 Commands\StatusCommand::class,
                 Commands\StopCommand::class,
