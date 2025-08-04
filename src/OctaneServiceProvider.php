@@ -27,6 +27,8 @@ use Laravel\Octane\Swoole\ServerStateFile as SwooleServerStateFile;
 use Laravel\Octane\Swoole\SignalDispatcher;
 use Laravel\Octane\Swoole\SwooleCoroutineDispatcher;
 use Laravel\Octane\Swoole\SwooleTaskDispatcher;
+use Laravel\Octane\ReactPhp\ServerProcessInspector as ReactPhpServerProcessInspector;
+use Laravel\Octane\ReactPhp\ServerStateFile as ReactPhpServerStateFile;
 
 class OctaneServiceProvider extends ServiceProvider
 {
@@ -81,6 +83,19 @@ class OctaneServiceProvider extends ServiceProvider
 
         $this->app->bind(FrankenPhpServerStateFile::class, function ($app) {
             return new FrankenPhpServerStateFile($app['config']->get(
+                'octane.state_file',
+                storage_path('logs/octane-server-state.json')
+            ));
+        });
+
+        $this->app->bind(ReactPhpServerProcessInspector::class, function ($app) {
+            return new ReactPhpServerProcessInspector(
+                $app->make(PosixExtension::class)
+            );
+        });
+
+        $this->app->bind(ReactPhpServerStateFile::class, function ($app) {
+            return new ReactPhpServerStateFile($app['config']->get(
                 'octane.state_file',
                 storage_path('logs/octane-server-state.json')
             ));

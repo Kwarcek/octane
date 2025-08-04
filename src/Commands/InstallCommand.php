@@ -14,7 +14,8 @@ use function Laravel\Prompts\select;
 class InstallCommand extends Command
 {
     use Concerns\InstallsFrankenPhpDependencies,
-        Concerns\InstallsRoadRunnerDependencies;
+        Concerns\InstallsRoadRunnerDependencies,
+        Concerns\InstallsReactPhpDependencies;
 
     /**
      * The command's signature.
@@ -41,7 +42,7 @@ class InstallCommand extends Command
     {
         $server = $this->option('server') ?: select(
             label: 'Which application server you would like to use?',
-            options: ['frankenphp', 'roadrunner', 'swoole'],
+            options: ['frankenphp', 'roadrunner', 'swoole', 'reactphp'],
             default: 'frankenphp'
         );
 
@@ -49,6 +50,7 @@ class InstallCommand extends Command
             'swoole' => $this->installSwooleServer(),
             'roadrunner' => $this->installRoadRunnerServer(),
             'frankenphp' => $this->installFrankenPhpServer(),
+            'reactphp' => $this->installReactPhpServer(),
             default => $this->invalidServer($server),
         }, function ($installed) use ($server) {
             if ($installed) {
@@ -157,6 +159,20 @@ class InstallCommand extends Command
         } catch (Throwable $e) {
             $this->components->error($e->getMessage());
 
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Install the ReactPHP dependencies.
+     *
+     * @return bool
+     */
+    public function installReactPhpServer()
+    {
+        if (! $this->ensureReactPhpPackageIsInstalled()) {
             return false;
         }
 
