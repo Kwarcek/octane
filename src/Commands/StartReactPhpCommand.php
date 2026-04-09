@@ -72,7 +72,7 @@ class StartReactPhpCommand extends Command implements SignalableCommandInterface
 
         $server = tap(new Process([
             (new PhpExecutableFinder)->find(),
-            ...config('octane.swoole.php_options', []),
+            ...config('octane.reactphp.php_options', []),
             'reactphp-server',
             $serverStateFile->path(),
         ], realpath(__DIR__.'/../../bin'), [
@@ -94,7 +94,7 @@ class StartReactPhpCommand extends Command implements SignalableCommandInterface
         ReactPhpExtension $extension
     ) {
         $serverStateFile->write(array_merge($this->defaultServerOptions($extension), [
-            'appName' => app()->environment(),
+            'appName' => config('app.name', 'Laravel'),
             'octaneConfig' => config('octane'),
             'publicPath' => public_path(),
         ]));

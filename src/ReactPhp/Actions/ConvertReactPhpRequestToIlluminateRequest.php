@@ -4,6 +4,7 @@ namespace Laravel\Octane\ReactPhp\Actions;
 
 use Illuminate\Http\Request;
 use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Component\HttpFoundation\InputBag;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 class ConvertReactPhpRequestToIlluminateRequest
@@ -23,10 +24,14 @@ class ConvertReactPhpRequestToIlluminateRequest
             $symfonyHeaders[strtolower($name)] = $values;
         }
 
+        $requestData = is_array($reactPhpRequest->getParsedBody())
+            ? $reactPhpRequest->getParsedBody()
+            : [];
+
         $symfonyRequest = SymfonyRequest::create(
             (string) $uri,
             $method,
-            $reactPhpRequest->getQueryParams(),
+            $requestData,
             $reactPhpRequest->getCookieParams(),
             $this->convertUploadedFiles($reactPhpRequest->getUploadedFiles()),
             $_SERVER,
@@ -46,6 +51,16 @@ class ConvertReactPhpRequestToIlluminateRequest
         $server['HTTPS'] = $uri->getScheme() === 'https' ? 'on' : 'off';
 
         $symfonyRequest->server->replace($server);
+
+        if (empty($requestData) &&
+            str_starts_with((string) $symfonyRequest->headers->get('CONTENT_TYPE'), 'application/x-www-form-urlencoded') &&
+            in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            parse_str($body, $data);
+
+            $symfonyRequest->request = new InputBag($data);
+        }
+
+        $symfonyRequest->query->replace($reactPhpRequest->getQueryParams());
 
         return Request::createFromBase($symfonyRequest);
     }

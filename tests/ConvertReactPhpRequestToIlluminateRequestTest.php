@@ -29,6 +29,7 @@ class ConvertReactPhpRequestToIlluminateRequestTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn(['param' => 'value']);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn([]);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn(['cookie' => 'value']);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn([]);
 
@@ -61,6 +62,7 @@ class ConvertReactPhpRequestToIlluminateRequestTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn([]);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn(['post_data' => 'value']);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn([]);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn([]);
 
@@ -94,6 +96,7 @@ class ConvertReactPhpRequestToIlluminateRequestTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn([]);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn([]);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn([]);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn(['file' => $uploadedFile]);
 
@@ -112,13 +115,18 @@ class ConvertReactPhpRequestToIlluminateRequestTest extends TestCase
         $uploadedFile->shouldReceive('getError')->andReturn(UPLOAD_ERR_OK);
         $uploadedFile->shouldReceive('getSize')->andReturn(10);
 
-        $fileStream->shouldReceive('getMetadata')->with('uri')->andReturn('/tmp/test');
+        $tempFile = tempnam(sys_get_temp_dir(), 'octane-upload-');
+        file_put_contents($tempFile, 'test');
+
+        $fileStream->shouldReceive('getMetadata')->with('uri')->andReturn($tempFile);
 
         $request = ($this->converter)($reactPhpRequest, 'cli');
 
         $this->assertInstanceOf(Request::class, $request);
         $this->assertEquals('POST', $request->getMethod());
         $this->assertTrue($request->hasFile('file'));
+
+        @unlink($tempFile);
     }
 
     public function test_can_convert_request_with_https()
@@ -132,6 +140,7 @@ class ConvertReactPhpRequestToIlluminateRequestTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn([]);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn([]);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn([]);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn([]);
 

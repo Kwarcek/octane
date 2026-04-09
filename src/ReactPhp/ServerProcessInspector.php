@@ -4,11 +4,12 @@ namespace Laravel\Octane\ReactPhp;
 
 use Laravel\Octane\Contracts\ServerProcessInspector as ServerProcessInspectorContract;
 use Laravel\Octane\PosixExtension;
-use Laravel\Octane\ReactPhp\ServerStateFile;
+use Throwable;
 
 class ServerProcessInspector implements ServerProcessInspectorContract
 {
     public function __construct(
+        protected ServerStateFile $serverStateFile,
         protected PosixExtension $posix
     ) {
     }
@@ -23,7 +24,11 @@ class ServerProcessInspector implements ServerProcessInspectorContract
             return false;
         }
 
-        return $this->posix->kill($state['pid'], 0);
+        try {
+            return $this->posix->kill($state['pid'], 0);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -33,8 +38,12 @@ class ServerProcessInspector implements ServerProcessInspectorContract
     {
         $state = $this->getServerState();
 
-        if (isset($state['pid'])) {
-            $this->posix->kill($state['pid'], SIGUSR1);
+        if (isset($state['pid']) && defined('SIGUSR1')) {
+            try {
+                $this->posix->kill($state['pid'], SIGUSR1);
+            } catch (Throwable) {
+                //
+            }
         }
     }
 
@@ -45,8 +54,12 @@ class ServerProcessInspector implements ServerProcessInspectorContract
     {
         $state = $this->getServerState();
 
-        if (isset($state['pid'])) {
-            return $this->posix->kill($state['pid'], SIGTERM);
+        if (isset($state['pid']) && defined('SIGTERM')) {
+            try {
+                return $this->posix->kill($state['pid'], SIGTERM);
+            } catch (Throwable) {
+                return false;
+            }
         }
 
         return false;
@@ -57,16 +70,6 @@ class ServerProcessInspector implements ServerProcessInspectorContract
      */
     protected function getServerState(): array
     {
-        $stateFile = new ServerStateFile($this->getStateFilePath());
-
-        return $stateFile->read();
-    }
-
-    /**
-     * Get the path to the server state file.
-     */
-    protected function getStateFilePath(): string
-    {
-        return storage_path('logs/octane-reactphp-server-state.json');
+        return $this->serverStateFile->read();
     }
 }
