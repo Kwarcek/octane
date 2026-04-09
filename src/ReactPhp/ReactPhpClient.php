@@ -11,8 +11,6 @@ use Laravel\Octane\MimeType;
 use Laravel\Octane\Octane;
 use Laravel\Octane\OctaneResponse;
 use Laravel\Octane\RequestContext;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 use React\Http\Message\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -63,7 +61,7 @@ class ReactPhpClient implements Client, ServesStaticFiles
             return false;
         }
 
-        $publicPath = $context->publicPath;
+        $publicPath = realpath($context->publicPath) ?: $context->publicPath;
 
         $pathToFile = realpath($publicPath.'/'.$request->path());
 
@@ -112,7 +110,10 @@ class ReactPhpClient implements Client, ServesStaticFiles
      */
     protected function fileIsServable(string $publicPath, string $pathToFile): bool
     {
-        return $pathToFile && is_file($pathToFile) && str_starts_with($pathToFile, $publicPath);
+        return $pathToFile &&
+               ! in_array(pathinfo($pathToFile, PATHINFO_EXTENSION), ['php', 'htaccess', 'config']) &&
+               str_starts_with($pathToFile, $publicPath) &&
+               is_file($pathToFile);
     }
 
     /**
@@ -120,10 +121,11 @@ class ReactPhpClient implements Client, ServesStaticFiles
      */
     public function serveStaticFile(Request $request, RequestContext $context): void
     {
-        $pathToFile = realpath($context->publicPath.'/'.$request->path());
+        $publicPath = realpath($context->publicPath) ?: $context->publicPath;
+        $pathToFile = realpath($publicPath.'/'.$request->path());
 
-        if ($this->isValidFileWithinSymlink($request, $context->publicPath, $pathToFile)) {
-            $pathToFile = $context->publicPath.'/'.$request->path();
+        if ($this->isValidFileWithinSymlink($request, $publicPath, $pathToFile)) {
+            $pathToFile = $publicPath.'/'.$request->path();
         }
 
         $mimeType = MimeType::get(pathinfo($pathToFile, PATHINFO_EXTENSION));
@@ -147,41 +149,7 @@ class ReactPhpClient implements Client, ServesStaticFiles
     public function respond(RequestContext $context, OctaneResponse $octaneResponse): void
     {
         $response = $octaneResponse->response;
-
-        $this->sendResponseHeaders($response, $context->reactPhpResponse);
-
-        $this->sendResponseContent($octaneResponse, $context->reactPhpResponse);
-    }
-
-    /**
-     * Send the response headers to the ReactPHP response.
-     */
-    protected function sendResponseHeaders(SymfonyResponse $response, $reactPhpResponse): void
-    {
-        $headers = [];
-
-        foreach ($response->headers->all() as $name => $values) {
-            $headers[$name] = implode(', ', $values);
-        }
-
-        // Add cookies to headers
-        foreach ($response->headers->getCookies() as $cookie) {
-            $headers['Set-Cookie'][] = $cookie->__toString();
-        }
-
-        $reactPhpResponse->resolve(new Response(
-            $response->getStatusCode(),
-            $headers,
-            $response->getContent()
-        ));
-    }
-
-    /**
-     * Send the response content to the ReactPHP response.
-     */
-    protected function sendResponseContent(OctaneResponse $octaneResponse, $reactPhpResponse): void
-    {
-        $response = $octaneResponse->response;
+        $reactPhpResponse = $context->reactPhpResponse;
 
         if ($response instanceof StreamedResponse) {
             $content = '';
@@ -198,15 +166,21 @@ class ReactPhpClient implements Client, ServesStaticFiles
                 $this->getResponseHeaders($response),
                 $content
             ));
-        } elseif ($response instanceof BinaryFileResponse) {
-            $this->sendBinaryFileResponse($response, $reactPhpResponse);
-        } else {
-            $reactPhpResponse->resolve(new Response(
-                $response->getStatusCode(),
-                $this->getResponseHeaders($response),
-                $response->getContent()
-            ));
+
+            return;
         }
+
+        if ($response instanceof BinaryFileResponse) {
+            $this->sendBinaryFileResponse($response, $reactPhpResponse);
+
+            return;
+        }
+
+        $reactPhpResponse->resolve(new Response(
+            $response->getStatusCode(),
+            $this->getResponseHeaders($response),
+            $response->getContent()
+        ));
     }
 
     /**
@@ -219,7 +193,7 @@ class ReactPhpClient implements Client, ServesStaticFiles
 
         if ($response->getStatusCode() === 200) {
             $headers['Content-Length'] = $file->getSize();
-            $headers['Last-Modified'] = $file->getMTime();
+            $headers['Last-Modified'] = gmdate('D, d M Y H:i:s', $file->getMTime()).' GMT';
         }
 
         $reactPhpResponse->resolve(new Response(
@@ -236,8 +210,12 @@ class ReactPhpClient implements Client, ServesStaticFiles
     {
         $headers = [];
 
-        foreach ($response->headers->all() as $name => $values) {
+        foreach ($response->headers->allPreserveCase() as $name => $values) {
             $headers[$name] = implode(', ', $values);
+        }
+
+        foreach ($response->headers->getCookies() as $cookie) {
+            $headers['Set-Cookie'][] = (string) $cookie;
         }
 
         return $headers;
@@ -256,7 +234,7 @@ class ReactPhpClient implements Client, ServesStaticFiles
         ];
 
         if ($app->environment('local')) {
-            $content = $e->getMessage()."\n\n".$e->getTraceAsString();
+            $content = Octane::formatExceptionForClient($e, $app->make('config')->get('app.debug'));
         } else {
             $content = 'Internal Server Error';
         }

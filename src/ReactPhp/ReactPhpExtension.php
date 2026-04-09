@@ -42,7 +42,11 @@ class ReactPhpExtension
      */
     protected function getAutoWorkerCount(): int
     {
-        $cores = (int) shell_exec('nproc');
+        $cores = match (PHP_OS_FAMILY) {
+            'Windows' => (int) (getenv('NUMBER_OF_PROCESSORS') ?: 0),
+            'Darwin' => (int) trim((string) shell_exec('sysctl -n hw.ncpu 2>/dev/null')),
+            default => (int) trim((string) shell_exec('nproc 2>/dev/null')),
+        };
 
         return max(1, $cores * 2);
     }

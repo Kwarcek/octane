@@ -9,7 +9,7 @@ use Laravel\Octane\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
 use Laravel\Octane\Swoole\ServerProcessInspector as SwooleServerProcessInspector;
 use Laravel\Octane\Swoole\ServerStateFile as SwooleServerStateFile;
 use Laravel\Octane\ReactPhp\ServerProcessInspector as ReactPhpServerProcessInspector;
-use Laravel\Octane\ReactPhp\ServerStateFile;
+use Laravel\Octane\ReactPhp\ServerStateFile as ReactPhpServerStateFile;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'octane:stop')]
@@ -139,7 +139,7 @@ class StopCommand extends Command
         $inspector = app(ReactPhpServerProcessInspector::class);
 
         if (! $inspector->serverIsRunning()) {
-            app(ServerStateFile::class)->delete();
+            app(ReactPhpServerStateFile::class)->delete();
 
             $this->components->error('ReactPHP server is not running.');
 
@@ -150,7 +150,7 @@ class StopCommand extends Command
 
         $inspector->stopServer();
 
-        app(ServerStateFile::class)->delete();
+        app(ReactPhpServerStateFile::class)->delete();
 
         return 0;
     }

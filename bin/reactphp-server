@@ -3,7 +3,7 @@
 
 use Laravel\Octane\ReactPhp\ReactPhpClient;
 use Laravel\Octane\RequestContext;
-use Laravel\Octane\ReactPhp\ReactPhpExtension;
+use Laravel\Octane\ApplicationFactory;
 use Laravel\Octane\ReactPhp\ServerStateFile;
 use Laravel\Octane\ReactPhp\WorkerState;
 use React\EventLoop\Loop;
@@ -37,8 +37,6 @@ $serverState = json_decode(file_get_contents(
     $serverStateFile = $_SERVER['argv'][1]
 ), true)['state'];
 
-$extension = new ReactPhpExtension;
-
 /*
 |--------------------------------------------------------------------------
 | Create The HTTP Server
@@ -49,15 +47,16 @@ $extension = new ReactPhpExtension;
 |
 */
 
-$app = $bootstrap($serverState);
+$basePath = $bootstrap($serverState);
 
 $workerState = new WorkerState;
 
-$workerState->app = $app;
 $workerState->client = new ReactPhpClient;
-$workerState->worker = new Worker($app, $workerState->client);
-
+$workerState->worker = new Worker(
+    new ApplicationFactory($basePath), $workerState->client
+);
 $workerState->worker->boot();
+$workerState->app = $workerState->worker->application();
 
 $requestHandler = function (ServerRequestInterface $request) use ($workerState, $serverState) {
     $context = new RequestContext;
@@ -66,19 +65,22 @@ $requestHandler = function (ServerRequestInterface $request) use ($workerState, 
     $context->octaneConfig = $serverState['octaneConfig'] ?? [];
     $context->publicPath = $serverState['publicPath'] ?? null;
 
-    if ($workerState->client->canServeRequestAsStaticFile($request, $context)) {
-        $workerState->client->serveStaticFile($request, $context);
-        return $context->reactPhpResponse->promise();
-    }
+    $illuminateRequest = null;
 
     try {
-        [$request, $context] = $workerState->client->marshalRequest($context);
+        [$illuminateRequest, $context] = $workerState->client->marshalRequest($context);
 
-        $workerState->worker->handle($request, $context);
+        $workerState->worker->handle($illuminateRequest, $context);
 
         return $context->reactPhpResponse->promise();
     } catch (Throwable $e) {
-        $workerState->client->error($e, $workerState->app, $request, $context);
+        $workerState->client->error(
+            $e,
+            $workerState->app,
+            $illuminateRequest ?? \Illuminate\Http\Request::createFromGlobals(),
+            $context
+        );
+
         return $context->reactPhpResponse->promise();
     }
 };
@@ -94,5 +96,54 @@ $serverState['pid'] = getmypid();
 $stateFile->write($serverState);
 
 echo "ReactPHP server started on {$serverState['host']}:{$serverState['port']}" . PHP_EOL;
+
+/*
+|--------------------------------------------------------------------------
+| Signal Handling for Watch Mode
+|--------------------------------------------------------------------------
+|
+| We will set up signal handlers to allow the server to be reloaded
+| when file changes are detected. This enables the --watch functionality.
+|
+*/
+
+$reloadApplication = function () use ($bootstrap, $serverState, $workerState) {
+    try {
+        if (isset($workerState->worker)) {
+            $workerState->worker->terminate();
+        }
+
+        $basePath = $bootstrap($serverState);
+        $workerState->worker = new Worker(
+            new ApplicationFactory($basePath), $workerState->client
+        );
+        $workerState->worker->boot();
+        $workerState->app = $workerState->worker->application();
+
+        echo "Workers reloaded successfully." . PHP_EOL;
+    } catch (Throwable $e) {
+        echo "Error reloading workers: " . $e->getMessage() . PHP_EOL;
+    }
+};
+
+if (function_exists('pcntl_signal') && defined('SIGUSR1') && defined('SIGTERM')) {
+    pcntl_signal(SIGUSR1, $reloadApplication);
+    pcntl_signal(SIGTERM, function () use ($socket, $server) {
+        echo "Shutting down ReactPHP server..." . PHP_EOL;
+        $socket->close();
+        $server->close();
+        exit(0);
+    });
+}
+
+if (method_exists(Loop::class, 'addSignal') && defined('SIGUSR1') && defined('SIGTERM')) {
+    Loop::addSignal(SIGUSR1, $reloadApplication);
+    Loop::addSignal(SIGTERM, function () use ($socket, $server) {
+        echo "Shutting down ReactPHP server..." . PHP_EOL;
+        $socket->close();
+        $server->close();
+        Loop::stop();
+    });
+}
 
 Loop::run();

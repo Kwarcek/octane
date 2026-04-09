@@ -12,6 +12,7 @@ use Psr\Http\Message\StreamInterface;
 use Psr\Http\Message\UriInterface;
 use React\Promise\Deferred;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReactPhpClientTest extends TestCase
 {
@@ -33,6 +34,7 @@ class ReactPhpClientTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn([]);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn([]);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn([]);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn([]);
 
@@ -57,9 +59,9 @@ class ReactPhpClientTest extends TestCase
 
     public function test_can_serve_static_files()
     {
-        $request = Request::create('/test.txt');
+        $request = Request::create('/bar.txt');
         $context = new RequestContext;
-        $context->publicPath = __DIR__.'/public';
+        $context->publicPath = __DIR__.'/public/files';
         $context->octaneConfig = ['serve_static_files' => true];
 
         $this->assertTrue($this->client->canServeRequestAsStaticFile($request, $context));
@@ -67,7 +69,7 @@ class ReactPhpClientTest extends TestCase
 
     public function test_cannot_serve_static_files_when_disabled()
     {
-        $request = Request::create('/test.txt');
+        $request = Request::create('/bar.txt');
         $context = new RequestContext;
         $context->publicPath = __DIR__.'/public';
         $context->octaneConfig = ['serve_static_files' => false];
@@ -102,8 +104,7 @@ class ReactPhpClientTest extends TestCase
 
     public function test_can_respond_with_streamed_response()
     {
-        $response = new SymfonyResponse();
-        $response->setCallback(function () {
+        $response = new StreamedResponse(function () {
             echo 'Streamed content';
         });
 
@@ -127,7 +128,7 @@ class ReactPhpClientTest extends TestCase
         $deferred = new Deferred;
         $context->reactPhpResponse = $deferred;
 
-        $this->client->error($exception, app(), $request, $context);
+        $this->client->error($exception, $this->createApplication(), $request, $context);
 
         $promise = $deferred->promise();
         $this->assertInstanceOf(\React\Promise\PromiseInterface::class, $promise);
@@ -160,6 +161,7 @@ class ReactPhpClientTest extends TestCase
         $reactPhpRequest->shouldReceive('getHeaders')->andReturn(['Host' => ['localhost']]);
         $reactPhpRequest->shouldReceive('getBody')->andReturn($stream);
         $reactPhpRequest->shouldReceive('getQueryParams')->andReturn([]);
+        $reactPhpRequest->shouldReceive('getParsedBody')->andReturn([]);
         $reactPhpRequest->shouldReceive('getCookieParams')->andReturn([]);
         $reactPhpRequest->shouldReceive('getUploadedFiles')->andReturn(['file' => $uploadedFile]);
 
@@ -178,7 +180,10 @@ class ReactPhpClientTest extends TestCase
         $uploadedFile->shouldReceive('getError')->andReturn(UPLOAD_ERR_OK);
         $uploadedFile->shouldReceive('getSize')->andReturn(10);
 
-        $fileStream->shouldReceive('getMetadata')->with('uri')->andReturn('/tmp/test');
+        $tempFile = tempnam(sys_get_temp_dir(), 'octane-upload-');
+        file_put_contents($tempFile, 'test');
+
+        $fileStream->shouldReceive('getMetadata')->with('uri')->andReturn($tempFile);
 
         $context = new RequestContext;
         $context->reactPhpRequest = $reactPhpRequest;
@@ -187,5 +192,7 @@ class ReactPhpClientTest extends TestCase
 
         $this->assertInstanceOf(Request::class, $request);
         $this->assertEquals('POST', $request->getMethod());
+
+        @unlink($tempFile);
     }
 }

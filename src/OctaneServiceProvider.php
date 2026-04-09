@@ -90,6 +90,7 @@ class OctaneServiceProvider extends ServiceProvider
 
         $this->app->bind(ReactPhpServerProcessInspector::class, function ($app) {
             return new ReactPhpServerProcessInspector(
+                $app->make(ReactPhpServerStateFile::class),
                 $app->make(PosixExtension::class)
             );
         });
