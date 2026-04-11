@@ -211,6 +211,10 @@ class ReactPhpClient implements Client, ServesStaticFiles
         $headers = [];
 
         foreach ($response->headers->allPreserveCase() as $name => $values) {
+            if (strcasecmp($name, 'Set-Cookie') === 0) {
+                continue;
+            }
+
             $headers[$name] = implode(', ', $values);
         }
 

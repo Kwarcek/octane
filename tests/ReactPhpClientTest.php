@@ -11,6 +11,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\StreamInterface;
 use Psr\Http\Message\UriInterface;
 use React\Promise\Deferred;
+use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -100,6 +101,22 @@ class ReactPhpClientTest extends TestCase
 
         $promise = $deferred->promise();
         $this->assertInstanceOf(\React\Promise\PromiseInterface::class, $promise);
+    }
+
+    public function test_can_respond_with_cookies_without_set_cookie_header_conflict()
+    {
+        $response = new SymfonyResponse('OK', 200);
+        $response->headers->setCookie(Cookie::create('session', 'abc'));
+
+        $octaneResponse = new OctaneResponse($response);
+
+        $context = new RequestContext;
+        $deferred = new Deferred;
+        $context->reactPhpResponse = $deferred;
+
+        $this->client->respond($context, $octaneResponse);
+
+        $this->assertInstanceOf(\React\Promise\PromiseInterface::class, $deferred->promise());
     }
 
     public function test_can_respond_with_streamed_response()
